@@ -19,7 +19,7 @@ module AnyCable
 
           expires_at ||= AnyCable.config.jwt_id_ttl.seconds.from_now
 
-          serialized_ids = identifiers.transform_values { |v| AnyCable::Rails.serialize(v) }
+          serialized_ids = identifiers.transform_values { |v| Base64.strict_encode64(JSON.dump(v)) }
 
           payload = {ext: serialized_ids.to_json, exp: expires_at.to_i}
 
@@ -33,7 +33,7 @@ module AnyCable
           ::JWT.decode(token, key, true, {algorithm: ALGORITHM}).then do |decoded|
             JSON.parse(decoded.first.fetch("ext"))
           end.then do |serialized_ids|
-            serialized_ids.transform_values! { |v| AnyCable::Rails.deserialize(v) }
+            serialized_ids.transform_values! { |v| JSON.parse(Base64.decode64(v)) }
             serialized_ids
           end
         end
