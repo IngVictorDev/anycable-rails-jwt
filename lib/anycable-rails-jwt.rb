@@ -15,27 +15,24 @@ module AnyCable
       class << self
         def encode(expires_at: nil, **identifiers)
           key = AnyCable.config.jwt_id_key
-          raise ArgumentError, "JWT encryption key is not specified. Add it via `jwt_id_key` option" if key.blank?
+          raise ArgumentError, "JWT encryption key is not specified. Add it via `jwt_id_key` option" if key.nil? || key.empty?
 
           expires_at ||= AnyCable.config.jwt_id_ttl.seconds.from_now
 
-          serialized_ids = identifiers.transform_values { |v| Base64.strict_encode64(Marshal.dump(v)) }
-
-          payload = {ext: serialized_ids.to_json, exp: expires_at.to_i}
+          payload = {
+            ext: identifiers,
+            exp: expires_at.to_i
+          }
 
           ::JWT.encode(payload, key, ALGORITHM)
         end
 
         def decode(token)
           key = AnyCable.config.jwt_id_key
-          raise ArgumentError, "JWT encryption key is not specified. Add it via `jwt_id_key` option" if key.blank?
+          raise ArgumentError, "JWT encryption key is not specified. Add it via `jwt_id_key` option" if key.nil? || key.empty?
 
-          ::JWT.decode(token, key, true, {algorithm: ALGORITHM}).then do |decoded|
-            JSON.parse(decoded.first.fetch("ext"))
-          end.then do |serialized_ids|
-            serialized_ids.transform_values! { |v| Marshal.load(Base64.decode64(v)) }
-            serialized_ids
-          end
+          decoded_token = ::JWT.decode(token, key, true, algorithm: ALGORITHM)
+          decoded_token.first["ext"]
         end
       end
     end
