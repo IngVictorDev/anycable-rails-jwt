@@ -4,6 +4,7 @@ require "jwt"
 require "json"
 require "anycable-rails"
 
+require 'base64'
 require "anycable/rails/jwt/version"
 require "anycable/rails/jwt/config"
 
@@ -19,11 +20,9 @@ module AnyCable
 
           expires_at ||= AnyCable.config.jwt_id_ttl.seconds.from_now
 
-          serialized_ids = identifiers.transform_values do |v|
-            v.is_a?(ActiveRecord::Base) ? v.id : v
-          end
+          serialized_ids = identifiers.transform_values { |v| Base64.strict_encode64(JSON.dump(v)) }
+          payload = {ext: serialized_ids.to_json, exp: expires_at.to_i}
 
-          payload = {ext: serialized_ids, exp: expires_at.to_i}
           ::JWT.encode(payload, key, ALGORITHM)
         end
 
@@ -31,8 +30,12 @@ module AnyCable
           key = AnyCable.config.jwt_id_key
           raise ArgumentError, "JWT encryption key is not specified. Add it via `jwt_id_key` option" if key.blank?
 
-          decoded_token = ::JWT.decode(token, key, true, algorithm: ALGORITHM)
-          decoded_token.first["ext"]
+          ::JWT.decode(token, key, true, {algorithm: ALGORITHM}).then do |decoded|
+            JSON.parse(decoded.first.fetch("ext"))
+          end.then do |serialized_ids|
+            serialized_ids.transform_values! { |v| JSON.parse(Base64.decode64(v)) }
+            serialized_ids
+          end
         end
       end
     end
